@@ -1,0 +1,182 @@
+<!-- development version, includes helpful console warnings -->
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <link rel ="stylesheet" href="style.css">
+</head>
+
+<div id="app">
+    <h1>Weather Forcast</h1>
+    Please enter a city you want to find the weather of
+    <br> 
+    <input @keyup.enter="search" v-model="input">
+    <br>
+
+    <div class="error" v-if="showError">
+        <br>
+        {{city}} not found
+        <br>
+    </div>
+
+    <button v-on:click="search">Search</button>
+
+    <div v-if="showData">
+        <div class="forecast-container-today">
+            <img :src=weather.icon> <br>
+            Today <br>
+            <h2>{{weather.tempurature}}°C</h2>
+            A {{weather.tempSummary}} day<br>
+            {{weather.description}}<br>
+            {{weather.windSp}}knots wind speeds
+        </div>
+
+        <div class="forcast-description-container">
+            <p v-if="willRain">It's gonna be rainy, bring an umbrella!</p>
+            <p v-if="willRain == false">No rain in sight, pack light!</p>
+        </div>
+
+        <div class="forecast-container">
+            <li v-for="(key) in Object.keys(forcast3Days)">
+                <img :src=forcast3Days[key].icon><br>
+                <div class="date-label">
+                    {{ key }}<br>
+                    <h2>{{ forcast3Days[key].temp }}°C</h2>
+                </div>
+                A {{forcast3Days[key].tempSummary}} day<br>
+                {{ forcast3Days[key].description }}<br>
+                {{ forcast3Days[key].windSp }}Knots<br>
+                {{ forcast3Days[key].rain }}mm<br>
+            </li>
+        </div>
+        <br>
+
+        <div class="dropdown">
+            <button class="dropdown-toggle" @click="toggleDropdown">
+                {{ dropdownOpen ? "Hide Pollution Data" : "Show Pollution Data" }}
+            </button>
+
+            <div class="dropdown-content" v-if="dropdownOpen">
+                <div class="aqi-components-wrapper">
+                    <div class="aqi-box">
+                        <h2>Air Quality</h2>
+                        <p class="aqi-value">{{ 6 - aqi }}/5</p>
+                        <a href="https://en.wikipedia.org/wiki/Air_quality_index#United_Kingdom" target="_blank">For more details click here!</a>
+                    </div>
+
+                    <div class="components-table-container">
+                        <table class="components-table">
+                            <thead>
+                                <tr>
+                                    <th>Component</th>
+                                    <th>Value (µg/m³)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(value, key) in components" :key="key">
+                                    <td>{{ key.toUpperCase() }}</td>
+                                    <td>{{ value }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    var app = new Vue({
+        el:'#app',
+        data:{
+            input: '',
+            city: '',
+            weather: -1,
+            Long: 0,
+            Lat: 0,
+            aqi: -1,
+            components: {},
+            forcast3Days: {},
+            willRain: false,
+            dropdownOpen: false,
+            showData: false,
+            showError: false,
+            error: null,
+        },
+        methods:{ 
+            search : function() {
+                this.getForcast().then(() => {
+                    this.getPollution();
+                    this.get3DayForcast();
+                });
+            },
+            getForcast : getForcast,
+            getPollution : getPollution,
+            get3DayForcast : get3DayForcast,
+            toggleDropdown : toggleDropdown
+        }
+    })
+
+    function getForcast () {
+        console.log(`getForcast called with ${this.input}`);
+        this.city = this.input;
+
+        return fetch("CitySearch/"+this.input)
+            .then(
+                response => {
+                    console.log(response.status)
+                    if (!response.ok) {
+                        if (response.status === 404) {
+                            throw new Error('404 no city')
+                        }
+                        throw new Error('500 no api');
+                    }
+                    return response.json()
+            }).then(response => { 
+                this.weather = {tempurature: response.temp, description: response.disc, icon: response.icon, tempSummary: response.tempSummary, date: response.data, windSp : response.windSp};
+                this.Long = response.long;
+                this.Lat = response.lat;
+                this.showData = true;
+                this.showError = false;
+            }).catch(e => {
+                this.showData = false;
+                this.showError = true;
+                this.error = e;
+                console.log('here')
+            });
+    }
+
+    function getPollution () {
+        console.log(`getPollution called with ${this.Long}, ${this.Lat}`);
+
+        fetch("Pollution/" + this.Long + "/" + this.Lat)
+            .then(response => response.json())
+            .then(json => {
+                const { aqi, components } = json || {};
+                this.aqi = aqi;
+                this.components = components;
+            });
+    }
+
+    function get3DayForcast () {
+        console.log(`get3DayForcast called with ${this.Long}, ${this.Lat}`);
+
+        fetch("3DayForcast/" + this.Long + "/" + this.Lat)
+            .then(response => response.json())
+            .then(json => {
+                this.forcast3Days = json
+                let keys = Object.keys(this.forcast3Days);
+                for (let i = 0; i < keys.length; i++) {
+                    if (this.forcast3Days[keys[i]].isRaining) {
+                        this.willRain = true;
+                        break;
+                    }
+                }
+            });
+    }
+
+    function toggleDropdown() {
+        this.dropdownOpen = !this.dropdownOpen;
+    }
+
+</script>
